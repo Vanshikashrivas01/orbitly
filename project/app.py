@@ -196,11 +196,11 @@ def load_json_file(name):
 
 # Used only if segment_profiles.json (made in Colab) is not found.
 DEFAULT_SEGMENT_PROFILES = {
-    0: {"name": "Budget Basics",
-        "description": "Mid-tenure customers with very low monthly bills (mostly basic/phone-only services).",
+    0: {"name": "Phone-Only (No Internet)",
+        "description": "Mid-tenure customers with phone service but no internet, paying very low monthly bills (about $21).",
         "churn_rate": 0.07},
-    1: {"name": "Steady Mid-Spenders",
-        "description": "Mid-tenure customers with moderate monthly bills.",
+    1: {"name": "Internet-Only (No Phone)",
+        "description": "Mid-tenure customers on DSL internet with no phone line, paying moderate monthly bills (about $42).",
         "churn_rate": 0.25},
     2: {"name": "New High-Bill Customers",
         "description": "Newer customers (short tenure) paying high monthly bills, often fiber optic, usually month-to-month contracts.",
@@ -341,7 +341,7 @@ def top_drivers(X_scaled, n=3):
         return None, None
 
 
-def input_warnings(monthly_charges, internet_service):
+def input_warnings(monthly_charges, internet_service, phone_service="Yes"):
     """Flag inputs far from what the model saw in training."""
     msgs = []
     bill_usd = monthly_charges
@@ -354,6 +354,16 @@ def input_warnings(monthly_charges, internet_service):
         msgs.append(
             "Fiber customers in the training data usually pay much more than this, "
             "so the result may be less reliable."
+        )
+    if phone_service == "No" and internet_service == "No":
+        msgs.append(
+            "The training data has no customers with neither phone nor internet, "
+            "so this combination can't be scored reliably."
+        )
+    if phone_service == "No" and internet_service == "Fiber optic":
+        msgs.append(
+            "In the training data, customers without phone service all use DSL internet, "
+            "so this combination is outside what the model has seen."
         )
     return msgs
 
@@ -724,7 +734,8 @@ elif st.session_state.page == "form":
             dependents = st.selectbox("Has Dependents", ["No", "Yes"])
 
             st.subheader("Add-on Services")
-            multiple_lines = st.selectbox("Multiple Phone Lines", ["No", "Yes"])
+            phone_service = st.selectbox("Phone Service", ["Yes", "No"])
+            multiple_lines = st.selectbox("Multiple Phone Lines", ["No", "Yes"], disabled=(phone_service == "No"))
             online_security = st.selectbox("Online Security", ["No", "Yes"], disabled=(internet_service == "No"))
             online_backup = st.selectbox("Online Backup", ["No", "Yes"], disabled=(internet_service == "No"))
             device_protection = st.selectbox("Device Protection", ["No", "Yes"], disabled=(internet_service == "No"))
@@ -732,7 +743,7 @@ elif st.session_state.page == "form":
             streaming_tv = st.selectbox("Streaming TV", ["No", "Yes"], disabled=(internet_service == "No"))
             streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes"], disabled=(internet_service == "No"))
 
-        for msg in input_warnings(monthly_charges, internet_service):
+        for msg in input_warnings(monthly_charges, internet_service, phone_service):
             st.warning(msg)
 
         st.markdown("---")
@@ -753,8 +764,8 @@ elif st.session_state.page == "form":
                     'Partner': partner,
                     'Dependents': dependents,
                     'tenure': tenure,
-                    'PhoneService': 'Yes',
-                    'MultipleLines': multiple_lines,
+                    'PhoneService': phone_service,
+                    'MultipleLines': "No phone service" if phone_service == "No" else multiple_lines,
                     'InternetService': internet_service,
                     'OnlineSecurity': format_addon(online_security),
                     'OnlineBackup': format_addon(online_backup),
@@ -786,7 +797,7 @@ elif st.session_state.page == "results":
         profile = get_profile(segment)
         risk_level = risk_level_for(churn_proba)
 
-        for msg in input_warnings(input_dict['MonthlyCharges'], input_dict['InternetService']):
+        for msg in input_warnings(input_dict['MonthlyCharges'], input_dict['InternetService'], input_dict['PhoneService']):
             st.warning(msg)
 
         res_col1, res_col2 = st.columns(2)
